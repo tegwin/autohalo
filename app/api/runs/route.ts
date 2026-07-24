@@ -69,12 +69,12 @@ export async function POST(request: NextRequest) {
 
   const { entities, added } = withDependencies(body.direction, body.entities)
 
-  // A dry run is a fixed preview: 5 random records of each selected type,
-  // no filtering or record selection. Strip the filters here so that holds
-  // even if a client sends them, keeping the two modes clearly distinct.
+  // A trial samples 5 records of each type. It honours the company selection
+  // (so you can preview a specific customer) but not date ranges, which do not
+  // apply to a fixed-size sample. A live run honours everything.
   const isDryRun = body.mode === 'dry_run'
   const selection = isDryRun
-    ? { entities }
+    ? { entities, companyIds: body.companyIds, options: body.options }
     : {
         entities,
         since: body.since,

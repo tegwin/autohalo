@@ -249,62 +249,59 @@ export function MigrationWizard({
       </div>
 
       <div className="card space-y-4">
-        <h2 className="font-semibold">3. Options</h2>
+        <h2 className="font-semibold">3. Which companies</h2>
+
+        {sourceId ? (
+          <CompanyPicker connectionId={sourceId} selected={companyScope} onChange={setCompanyScope} />
+        ) : (
+          <p className="hint">Choose a source connection first.</p>
+        )}
 
         {mode === 'dry_run' ? (
           <p className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700 dark:border-brand-700/50 dark:bg-brand-700/10 dark:text-brand-200">
-            A trial run copies <strong>5 random records of each selected type</strong> into the
-            target so you can open them in Halo and confirm it works. Those 5 are remembered, so
-            your later live migration skips them rather than duplicating. Filtering and date ranges
-            apply to <strong>live runs</strong> only.
+            This is a <strong>trial</strong>: it copies up to <strong>5 records of each selected
+            type</strong> into Halo so you can confirm it works — drawn from the companies you pick
+            above (or at random if you pick none). Those records are remembered, so your later live
+            migration skips them rather than duplicating.
           </p>
-        ) : (
-          <>
-            <div>
-              <label className="label">Which companies</label>
-              {sourceId ? (
-                <CompanyPicker
-                  connectionId={sourceId}
-                  selected={companyScope}
-                  onChange={setCompanyScope}
-                />
-              ) : (
-                <p className="hint">Choose a source connection first.</p>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="label" htmlFor="since">
-                  Only records created on or after
-                </label>
-                <input id="since" type="date" className="input" value={since} onChange={(e) => setSince(e.target.value)} />
-                <p className="hint mt-1">Leave blank for everything.</p>
-              </div>
-              <div>
-                <label className="label" htmlFor="until">
-                  …and before
-                </label>
-                <input id="until" type="date" className="input" value={until} onChange={(e) => setUntil(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <Toggle checked={includeTime} onChange={setIncludeTime} label="Include time entries on tickets and tasks" />
-              <Toggle checked={includeNotes} onChange={setIncludeNotes} label="Include ticket and task notes" />
-              <Toggle
-                checked={createAgents}
-                onChange={setCreateAgents}
-                label="Create Halo agents for Autotask resources that do not already exist"
-                hint="Each new Halo agent consumes a licence seat. Off by default; existing agents are matched by email either way."
-              />
-            </div>
-          </>
-        )}
+        ) : null}
       </div>
 
+      {mode === 'live' ? (
+        <div className="card space-y-4">
+          <h2 className="font-semibold">4. Options</h2>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="since">
+                Only records created on or after
+              </label>
+              <input id="since" type="date" className="input" value={since} onChange={(e) => setSince(e.target.value)} />
+              <p className="hint mt-1">Leave blank for everything.</p>
+            </div>
+            <div>
+              <label className="label" htmlFor="until">
+                …and before
+              </label>
+              <input id="until" type="date" className="input" value={until} onChange={(e) => setUntil(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-2 text-sm">
+            <Toggle checked={includeTime} onChange={setIncludeTime} label="Include time entries on tickets and tasks" />
+            <Toggle checked={includeNotes} onChange={setIncludeNotes} label="Include ticket and task notes" />
+            <Toggle
+              checked={createAgents}
+              onChange={setCreateAgents}
+              label="Create Halo agents for Autotask resources that do not already exist"
+              hint="Each new Halo agent consumes a licence seat. Off by default; existing agents are matched by email either way."
+            />
+          </div>
+        </div>
+      ) : null}
+
       <div className="card space-y-4">
-        <h2 className="font-semibold">4. Run</h2>
+        <h2 className="font-semibold">Start the run</h2>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Choice
