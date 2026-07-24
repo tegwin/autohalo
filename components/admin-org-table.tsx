@@ -2,8 +2,21 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Gift, Infinity as InfinityIcon, Loader2 } from 'lucide-react'
+import { Gift, Infinity as InfinityIcon, Loader2, Ticket } from 'lucide-react'
 import type { AdminOrgRow } from '@/app/(app)/admin/page'
+
+/** Compact "3 days ago" style relative time for the last-login column. */
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diffMs / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  return new Date(iso).toLocaleDateString('en-GB')
+}
 
 export function AdminOrgTable({ orgs }: { orgs: AdminOrgRow[] }) {
   const router = useRouter()
@@ -38,6 +51,14 @@ export function AdminOrgTable({ orgs }: { orgs: AdminOrgRow[] }) {
     await call({ action: 'grant', orgId, quantity, note }, orgId)
   }
 
+  async function unlockTrial(orgId: string) {
+    const raw = prompt('How many extra free trial runs should this organisation get?', '1')
+    if (raw === null) return
+    const quantity = Number(raw)
+    if (!Number.isFinite(quantity) || quantity < 1) return
+    await call({ action: 'grant_trial', orgId, quantity }, orgId)
+  }
+
   return (
     <>
       {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
@@ -46,7 +67,9 @@ export function AdminOrgTable({ orgs }: { orgs: AdminOrgRow[] }) {
           <thead>
             <tr>
               <th>Organisation</th>
-              <th>Members</th>
+              <th>Accounts</th>
+              <th>Runs</th>
+              <th>Trials</th>
               <th>Credits</th>
               <th>Billing</th>
               <th>Actions</th>
@@ -65,21 +88,33 @@ export function AdminOrgTable({ orgs }: { orgs: AdminOrgRow[] }) {
                   {org.members.length === 0 ? (
                     <span className="hint">—</span>
                   ) : (
-                    <ul className="space-y-0.5">
+                    <ul className="space-y-1.5">
                       {org.members.map((member) => (
-                        <li key={member.email} className="text-xs">
-                          {member.email}
+                        <li key={member.email} className="text-xs leading-tight">
+                          <span className="font-medium">{member.email}</span>
                           <span className="hint"> ({member.role})</span>
-                          {member.is_platform_admin ? (
+                          {member.isPlatformAdmin ? (
                             <span className="badge ml-1 bg-brand-100 text-brand-700 dark:bg-brand-700/20 dark:text-brand-300">
                               admin
                             </span>
                           ) : null}
+                          <span className="hint block">
+                            {member.lastSignInAt
+                              ? `last login ${timeAgo(member.lastSignInAt)}`
+                              : 'never logged in'}
+                            {member.signedUpAt
+                              ? ` · joined ${new Date(member.signedUpAt).toLocaleDateString('en-GB')}`
+                              : ''}
+                          </span>
                         </li>
                       ))}
                     </ul>
                   )}
                 </td>
+                <td className="tabular-nums" title="Total migration runs — count only, not their contents">
+                  {org.runCount}
+                </td>
+                <td className="tabular-nums">{org.unlimited ? '∞' : org.trial_runs_remaining}</td>
                 <td className="tabular-nums">{org.unlimited ? '∞' : org.creditsAvailable}</td>
                 <td>
                   {org.unlimited ? (
@@ -105,6 +140,14 @@ export function AdminOrgTable({ orgs }: { orgs: AdminOrgRow[] }) {
                         <Gift className="h-4 w-4" />
                       )}
                       Grant
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => unlockTrial(org.id)}
+                      disabled={busyId === org.id}
+                    >
+                      <Ticket className="h-4 w-4" />
+                      Unlock trial
                     </button>
                     <button
                       className="btn-secondary"

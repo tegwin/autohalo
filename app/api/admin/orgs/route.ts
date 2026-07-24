@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getSessionContext } from '@/lib/auth'
-import { grantEntitlement } from '@/lib/entitlements'
+import { grantEntitlement, grantTrialRuns } from '@/lib/entitlements'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
@@ -12,6 +12,11 @@ const schema = z.discriminatedUnion('action', [
     orgId: z.string().uuid(),
     quantity: z.number().int().min(1).max(100),
     note: z.string().max(200),
+  }),
+  z.object({
+    action: z.literal('grant_trial'),
+    orgId: z.string().uuid(),
+    quantity: z.number().int().min(1).max(100),
   }),
   z.object({
     action: z.literal('set_unlimited'),
@@ -47,6 +52,11 @@ export async function POST(request: NextRequest) {
   try {
     if (body.action === 'grant') {
       await grantEntitlement(body.orgId, ctx.userId, body.note, body.quantity)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (body.action === 'grant_trial') {
+      await grantTrialRuns(body.orgId, body.quantity)
       return NextResponse.json({ ok: true })
     }
 

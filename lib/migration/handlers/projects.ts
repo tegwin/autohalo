@@ -57,6 +57,9 @@ export interface HaloProject {
   client_id?: number
 }
 
+/** Halo template group that migrated Autotask project templates land in. */
+export const IMPORTED_TEMPLATE_GROUP = 'Imported from Autotask'
+
 /**
  * Autotask Project -> Halo project.
  *
@@ -180,6 +183,10 @@ function projectsToHalo(ctx: MigrationContext, cursor: TaskCursor, templatesOnly
             .filter(Boolean)
             .join('\n\n'),
           tickettype_id: types.project ?? types.incident ?? undefined,
+          // Autotask project templates are effectively ticket templates. Halo
+          // groups templates by a `group` label in the UI, so we drop them all
+          // into one clearly-named group rather than scattering them loose.
+          group: IMPORTED_TEMPLATE_GROUP,
           _taskCount: tasks.length,
         }
       }

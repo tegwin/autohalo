@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { canManage, getSessionContext } from '@/lib/auth'
-import { consumeEntitlement } from '@/lib/entitlements'
+import { consumeEntitlement, consumeTrialRun } from '@/lib/entitlements'
 import { seedRunTasks } from '@/lib/migration/engine'
 import { withDependencies } from '@/lib/migration/handlers'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -69,6 +69,20 @@ export async function POST(request: NextRequest) {
 
   const { entities, added } = withDependencies(body.direction, body.entities)
 
+  // A dry run is a fixed preview: 5 random records of each selected type,
+  // no filtering or record selection. Strip the filters here so that holds
+  // even if a client sends them, keeping the two modes clearly distinct.
+  const isDryRun = body.mode === 'dry_run'
+  const selection = isDryRun
+    ? { entities }
+    : {
+        entities,
+        since: body.since,
+        until: body.until,
+        companyIds: body.companyIds,
+        options: body.options,
+      }
+
   const { data: run, error } = await supabase
     .from('migration_runs')
     .insert({
@@ -79,13 +93,7 @@ export async function POST(request: NextRequest) {
       direction: body.direction,
       mode: body.mode,
       status: 'draft',
-      selection: {
-        entities,
-        since: body.since,
-        until: body.until,
-        companyIds: body.companyIds,
-        options: body.options,
-      },
+      selection,
     })
     .select('*')
     .single<MigrationRun>()
@@ -94,23 +102,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error?.message ?? 'Could not create the run' }, { status: 400 })
   }
 
-  // Charge before queueing, and only for live runs.
-  const allowed = await consumeEntitlement(ctx.org.id, run.id, {
-    isPlatformAdmin: ctx.isPlatformAdmin,
-    dryRun: body.mode === 'dry_run',
-  })
-
-  if (!allowed) {
-    await supabase.from('migration_runs').delete().eq('id', run.id)
-    return NextResponse.json(
-      {
-        error: 'No migration credit available. Purchase one to run a live migration.',
-        code: 'payment_required',
-      },
-      { status: 402 },
-    )
-  }
-
+  // Seed the work first: if queueing fails we reject before spending anything,
+  // so neither a trial allowance nor a paid credit can leak on error.
   try {
     await seedRunTasks(run)
   } catch (err) {
@@ -121,12 +114,43 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Then charge, per mode. A trial spends one trial allowance; a live run
+  // spends one purchased/granted credit. Platform admins spend neither.
+  if (isDryRun) {
+    const allowed = await consumeTrialRun(ctx.org.id, { isPlatformAdmin: ctx.isPlatformAdmin })
+    if (!allowed) {
+      await supabase.from('migration_runs').delete().eq('id', run.id)
+      return NextResponse.json(
+        {
+          error:
+            'You have used your free trial run. Purchase a live migration to move everything, or ask an administrator to unlock another trial.',
+          code: 'trial_exhausted',
+        },
+        { status: 402 },
+      )
+    }
+  } else {
+    const allowed = await consumeEntitlement(ctx.org.id, run.id, {
+      isPlatformAdmin: ctx.isPlatformAdmin,
+    })
+    if (!allowed) {
+      await supabase.from('migration_runs').delete().eq('id', run.id)
+      return NextResponse.json(
+        {
+          error: 'No migration credit available. Purchase one to run a live migration.',
+          code: 'payment_required',
+        },
+        { status: 402 },
+      )
+    }
+  }
+
   await supabase.from('migration_runs').update({ status: 'queued' }).eq('id', run.id)
   await supabase.from('run_logs').insert({
     run_id: run.id,
     org_id: ctx.org.id,
     level: 'info',
-    message: `Run queued (${body.mode === 'dry_run' ? 'dry run' : 'live'}) covering: ${entities.join(', ')}.`,
+    message: `Run queued (${isDryRun ? 'trial — 5 random of each' : 'live'}) covering: ${entities.join(', ')}.`,
   })
 
   // Cron ticks once a minute; nudging the worker makes the UI feel immediate.

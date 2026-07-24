@@ -72,7 +72,13 @@ export class MigrationContext {
     return client
   }
 
-  get isDryRun(): boolean {
+  /**
+   * A "trial" run (mode dry_run) copies a small random sample of real records
+   * so the customer can verify the result in their target system before paying
+   * for the full run. It writes, unlike a conventional dry run — hence the
+   * distinct name.
+   */
+  get isTrial(): boolean {
     return this.mode === 'dry_run'
   }
 

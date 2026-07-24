@@ -53,7 +53,11 @@ export default async function NewMigrationPage() {
           autotask_to_halo: availableEntities('autotask_to_halo'),
           halo_to_autotask: availableEntities('halo_to_autotask'),
         }}
-        credits={{ available: Number.isFinite(credits.available) ? credits.available : -1, reason: credits.reason }}
+        credits={{
+          available: Number.isFinite(credits.available) ? credits.available : -1,
+          reason: credits.reason,
+          trialsRemaining: Number.isFinite(credits.trialsRemaining) ? credits.trialsRemaining : -1,
+        }}
         canManage={canManage(ctx)}
       />
     </div>

@@ -60,6 +60,20 @@ export interface CopySpec<S> {
  * Runs one slice of a copy. Stops on the deadline and hands back a cursor that
  * resumes mid-page, so no record is fetched twice and none is lost.
  */
+/** How many records of each entity a dry run samples. */
+export const DRY_RUN_SAMPLE = 5
+
+/** Up to `n` items chosen at random (Fisher–Yates on a shallow copy). */
+function pickRandom<T>(items: T[], n: number): T[] {
+  if (items.length <= n) return [...items]
+  const copy = [...items]
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j]!, copy[i]!]
+  }
+  return copy.slice(0, n)
+}
+
 export async function runCopySlice<S>(
   ctx: MigrationContext,
   cursor: TaskCursor,
@@ -83,6 +97,45 @@ export async function runCopySlice<S>(
       result.done = page.done
       if (page.done) break
       continue
+    }
+
+    // A trial run is a bounded, REAL copy: DRY_RUN_SAMPLE records of this
+    // entity, chosen at random, written to the target so the customer can see
+    // them land in Halo/Autotask. Each is recorded in id_map exactly like a
+    // live write, so the later paid run recognises them and does not duplicate
+    // them. It is capped to one page and stops immediately after.
+    if (ctx.isTrial) {
+      const sample = pickRandom(page.items, DRY_RUN_SAMPLE)
+      const mappings = await ctx.prefetchMappings(spec.entity, sample.map((i) => spec.sourceId(i)))
+      for (const item of sample) {
+        if (ctx.expired()) break
+        const sourceId = spec.sourceId(item)
+        const sourceName = spec.sourceName(item)
+        const existing = mappings.get(sourceId) ?? null
+        try {
+          const payload = await spec.transform(ctx, item)
+          if (!payload) {
+            result.skipped++
+            continue
+          }
+          const targetId = await spec.write(ctx, payload, existing?.targetId ?? null, item)
+          await ctx.recordMapping(spec.entity, sourceId, targetId, payload)
+          if (spec.after) await spec.after(ctx, item, targetId)
+          result[existing ? 'updated' : 'created']++
+          result.processed++
+        } catch (err) {
+          result.failed++
+          ctx.error(`${spec.entity} "${sourceName}" failed`, {
+            sourceId,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          await ctx.recordFailure(spec.entity, sourceId, sourceName, err)
+        }
+      }
+      ctx.info(`Trial run copied ${result.created + result.updated} of ${page.items.length}+ available ${spec.entity} record(s).`)
+      result.done = true
+      result.cursor = { ...result.cursor, drained: true }
+      break
     }
 
     const startOffset = result.cursor.offset ?? 0
@@ -119,15 +172,8 @@ export async function runCopySlice<S>(
           continue
         }
 
-        if (ctx.isDryRun) {
-          // Dry runs prove the read and transform path without touching the
-          // target, which is what makes them useful as a pre-flight check.
-          result[existing ? 'updated' : 'created']++
-          result.processed++
-          index++
-          continue
-        }
-
+        // Trials are handled by the sampling branch above; this loop is the
+        // full live pass and always writes.
         const targetId = await spec.write(ctx, payload, existing?.targetId ?? null, item)
         await ctx.recordMapping(spec.entity, sourceId, targetId, payload)
 

@@ -69,6 +69,7 @@ export type OrgRow = {
   slug: string
   created_at: Timestamp
   unlimited: boolean
+  trial_runs_remaining: number
 }
 
 export type ProfileRow = {
@@ -213,7 +214,7 @@ export type Database = {
     Tables: {
       orgs: TableDef<
         OrgRow,
-        Insertable<OrgRow, 'id' | 'created_at' | 'unlimited'>,
+        Insertable<OrgRow, 'id' | 'created_at' | 'unlimited' | 'trial_runs_remaining'>,
         Partial<OrgRow>
       >
       profiles: TableDef<
@@ -334,6 +335,14 @@ export type Database = {
       consume_entitlement: {
         Args: { p_org_id: string; p_run_id: string }
         Returns: boolean
+      }
+      consume_trial_run: {
+        Args: { p_org_id: string }
+        Returns: boolean
+      }
+      grant_trial_runs: {
+        Args: { p_org_id: string; p_count: number }
+        Returns: undefined
       }
       claim_run: {
         Args: { p_holder: string; p_lease_seconds?: number }

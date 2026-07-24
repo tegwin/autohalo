@@ -17,6 +17,8 @@ export interface EntitlementStatus {
   available: number
   unlimited: boolean
   reason: 'unlimited' | 'admin' | 'purchased' | 'none'
+  /** Trial (sample) runs still available. Infinity for admin/unlimited. */
+  trialsRemaining: number
 }
 
 export async function entitlementStatus(
@@ -27,12 +29,16 @@ export async function entitlementStatus(
 
   const { data: org } = await supabase
     .from('orgs')
-    .select('unlimited')
+    .select('unlimited, trial_runs_remaining')
     .eq('id', orgId)
-    .single<{ unlimited: boolean }>()
+    .single<{ unlimited: boolean; trial_runs_remaining: number }>()
 
-  if (isPlatformAdmin) return { available: Infinity, unlimited: true, reason: 'admin' }
-  if (org?.unlimited) return { available: Infinity, unlimited: true, reason: 'unlimited' }
+  if (isPlatformAdmin) {
+    return { available: Infinity, unlimited: true, reason: 'admin', trialsRemaining: Infinity }
+  }
+  if (org?.unlimited) {
+    return { available: Infinity, unlimited: true, reason: 'unlimited', trialsRemaining: Infinity }
+  }
 
   const { count } = await supabase
     .from('entitlements')
@@ -41,22 +47,52 @@ export async function entitlementStatus(
     .is('consumed_by_run_id', null)
 
   const available = count ?? 0
-  return { available, unlimited: false, reason: available > 0 ? 'purchased' : 'none' }
+  return {
+    available,
+    unlimited: false,
+    reason: available > 0 ? 'purchased' : 'none',
+    trialsRemaining: org?.trial_runs_remaining ?? 0,
+  }
+}
+
+/**
+ * Spend one trial run. Trials copy a small real sample so the customer can see
+ * the result before paying; each org gets one by default. Returns false when
+ * none remain, so a customer cannot loop trials to migrate everything for free.
+ */
+export async function consumeTrialRun(
+  orgId: string,
+  opts: { isPlatformAdmin: boolean },
+): Promise<boolean> {
+  if (opts.isPlatformAdmin) return true
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('consume_trial_run', { p_org_id: orgId })
+  if (error) throw new Error(`Could not check your trial allowance: ${error.message}`)
+  return data === true
+}
+
+/** Admin: give an org more trial runs (the "unlock one more" action). */
+export async function grantTrialRuns(orgId: string, count = 1): Promise<void> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.rpc('grant_trial_runs', {
+    p_org_id: orgId,
+    p_count: Math.max(1, Math.min(count, 100)),
+  })
+  if (error) throw new Error(`Could not grant trial runs: ${error.message}`)
 }
 
 /**
  * Atomically claims an entitlement for a run. Returns false when the org has
  * nothing to spend, in which case the caller must not start the run.
  *
- * Dry runs never consume: a customer should be able to prove the mapping works
- * before paying, and charging for a rehearsal would push people to skip it.
+ * Live runs only — trials spend a separate allowance (see consumeTrialRun).
  */
 export async function consumeEntitlement(
   orgId: string,
   runId: string,
-  opts: { isPlatformAdmin: boolean; dryRun: boolean },
+  opts: { isPlatformAdmin: boolean },
 ): Promise<boolean> {
-  if (opts.isPlatformAdmin || opts.dryRun) return true
+  if (opts.isPlatformAdmin) return true
 
   const supabase = createAdminClient()
   const { data, error } = await supabase.rpc('consume_entitlement', {
