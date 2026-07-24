@@ -59,6 +59,14 @@ export function AdminOrgTable({ orgs }: { orgs: AdminOrgRow[] }) {
     await call({ action: 'grant_trial', orgId, quantity }, orgId)
   }
 
+  async function setTrialSize(orgId: string, current: number) {
+    const raw = prompt('How many random records per type should a trial copy? (1–50)', String(current))
+    if (raw === null) return
+    const size = Number(raw)
+    if (!Number.isFinite(size) || size < 1 || size > 50) return
+    await call({ action: 'set_trial_size', orgId, size }, orgId)
+  }
+
   return (
     <>
       {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
@@ -114,7 +122,16 @@ export function AdminOrgTable({ orgs }: { orgs: AdminOrgRow[] }) {
                 <td className="tabular-nums" title="Total migration runs — count only, not their contents">
                   {org.runCount}
                 </td>
-                <td className="tabular-nums">{org.unlimited ? '∞' : org.trial_runs_remaining}</td>
+                <td>
+                  <button
+                    className="inline-flex items-center gap-1 tabular-nums hover:underline"
+                    onClick={() => setTrialSize(org.id, org.trial_sample_size)}
+                    title="Records per type a trial copies — click to change"
+                  >
+                    {org.unlimited ? '∞' : org.trial_runs_remaining}
+                    <span className="hint">· {org.trial_sample_size}/type</span>
+                  </button>
+                </td>
                 <td className="tabular-nums">{org.unlimited ? '∞' : org.creditsAvailable}</td>
                 <td>
                   {org.unlimited ? (

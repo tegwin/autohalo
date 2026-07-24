@@ -57,6 +57,7 @@ export default async function NewMigrationPage() {
           available: Number.isFinite(credits.available) ? credits.available : -1,
           reason: credits.reason,
           trialsRemaining: Number.isFinite(credits.trialsRemaining) ? credits.trialsRemaining : -1,
+          trialSampleSize: credits.trialSampleSize,
         }}
         canManage={canManage(ctx)}
       />

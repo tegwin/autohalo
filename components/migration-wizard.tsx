@@ -59,7 +59,7 @@ export function MigrationWizard({
 }: {
   connections: Connection[]
   entitiesByDirection: Record<Direction, EntityOption[]>
-  credits: { available: number; reason: string; trialsRemaining: number }
+  credits: { available: number; reason: string; trialsRemaining: number; trialSampleSize: number }
   canManage: boolean
 }) {
   const router = useRouter()
@@ -114,6 +114,7 @@ export function MigrationWizard({
   // trialsRemaining is -1 for admin/unlimited (effectively unlimited trials).
   const unlimitedTrials = credits.trialsRemaining < 0
   const canRunTrial = unlimitedTrials || credits.trialsRemaining > 0
+  const n = credits.trialSampleSize
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -256,11 +257,9 @@ export function MigrationWizard({
             onClick={() => setMode('dry_run')}
             title="Free trial run"
             body={
-              unlimitedTrials
-                ? 'Copies 5 random records of each selected type into the target so you can see it working. Unlimited on this account.'
-                : canRunTrial
-                  ? 'Copies 5 random records of each selected type into the target so you can see them in Halo. One free trial per account. Records are chosen at random — no picking.'
-                  : 'Your free trial has been used. Purchase a live migration, or ask an administrator to unlock another trial.'
+              !canRunTrial
+                ? 'Your free trial has been used. Purchase a live migration, or ask an administrator to unlock another trial.'
+                : `Copies ${n} random records of each selected type into the target so you can see it working in Halo. The records are chosen at random — you cannot pick them.${unlimitedTrials ? ' Unlimited on this account.' : ' One free trial per account.'}`
             }
             disabled={!canRunTrial}
           />
@@ -380,10 +379,11 @@ export function MigrationWizard({
 
         {mode === 'dry_run' ? (
           <p className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700 dark:border-brand-700/50 dark:bg-brand-700/10 dark:text-brand-200">
-            This is a <strong>trial</strong>: it copies <strong>5 random records of each selected
-            type</strong> into the target so you can confirm it works. Records are chosen at
-            random — switch to a <strong>live migration</strong> above to pick exact records. The
-            trial records are remembered, so the live run skips them rather than duplicating.
+            This is a <strong>trial</strong>: it copies <strong>{n} records of each selected
+            type, chosen at random</strong>, into the target so you can confirm it works. You cannot
+            choose which records — switch to a <strong>live migration</strong> above to pick exact
+            records. The trial records are remembered, so the live run skips them rather than
+            duplicating.
           </p>
         ) : null}
       </div>
@@ -444,7 +444,7 @@ export function MigrationWizard({
           }
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {mode === 'dry_run' ? 'Start free trial (5 of each)' : 'Start live migration'}
+          {mode === 'dry_run' ? `Start free trial (${n} of each)` : 'Start live migration'}
           <ArrowRight className="h-4 w-4" />
         </button>
 

@@ -20,6 +20,7 @@ export interface AdminOrgRow {
   slug: string
   unlimited: boolean
   trial_runs_remaining: number
+  trial_sample_size: number
   created_at: string
   members: AdminMember[]
   creditsAvailable: number
