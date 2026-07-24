@@ -19,6 +19,8 @@ export interface EntitlementStatus {
   reason: 'unlimited' | 'admin' | 'purchased' | 'none'
   /** Trial (sample) runs still available. Infinity for admin/unlimited. */
   trialsRemaining: number
+  /** How many random records per entity a trial copies for this org. */
+  trialSampleSize: number
 }
 
 export async function entitlementStatus(
@@ -29,15 +31,17 @@ export async function entitlementStatus(
 
   const { data: org } = await supabase
     .from('orgs')
-    .select('unlimited, trial_runs_remaining')
+    .select('unlimited, trial_runs_remaining, trial_sample_size')
     .eq('id', orgId)
-    .single<{ unlimited: boolean; trial_runs_remaining: number }>()
+    .single<{ unlimited: boolean; trial_runs_remaining: number; trial_sample_size: number }>()
+
+  const trialSampleSize = org?.trial_sample_size ?? 3
 
   if (isPlatformAdmin) {
-    return { available: Infinity, unlimited: true, reason: 'admin', trialsRemaining: Infinity }
+    return { available: Infinity, unlimited: true, reason: 'admin', trialsRemaining: Infinity, trialSampleSize }
   }
   if (org?.unlimited) {
-    return { available: Infinity, unlimited: true, reason: 'unlimited', trialsRemaining: Infinity }
+    return { available: Infinity, unlimited: true, reason: 'unlimited', trialsRemaining: Infinity, trialSampleSize }
   }
 
   const { count } = await supabase
@@ -52,6 +56,7 @@ export async function entitlementStatus(
     unlimited: false,
     reason: available > 0 ? 'purchased' : 'none',
     trialsRemaining: org?.trial_runs_remaining ?? 0,
+    trialSampleSize,
   }
 }
 

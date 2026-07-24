@@ -60,8 +60,8 @@ export interface CopySpec<S> {
  * Runs one slice of a copy. Stops on the deadline and hands back a cursor that
  * resumes mid-page, so no record is fetched twice and none is lost.
  */
-/** How many records of each entity a dry run samples. */
-export const DRY_RUN_SAMPLE = 5
+/** Default trial sample size when an org has none set. */
+export const DEFAULT_TRIAL_SAMPLE = 3
 
 /** Up to `n` items chosen at random (Fisher–Yates on a shallow copy). */
 function pickRandom<T>(items: T[], n: number): T[] {
@@ -99,13 +99,13 @@ export async function runCopySlice<S>(
       continue
     }
 
-    // A trial run is a bounded, REAL copy: DRY_RUN_SAMPLE records of this
+    // A trial run is a bounded, REAL copy: ctx.trialSampleSize records of this
     // entity, chosen at random, written to the target so the customer can see
     // them land in Halo/Autotask. Each is recorded in id_map exactly like a
     // live write, so the later paid run recognises them and does not duplicate
     // them. It is capped to one page and stops immediately after.
     if (ctx.isTrial) {
-      const sample = pickRandom(page.items, DRY_RUN_SAMPLE)
+      const sample = pickRandom(page.items, ctx.trialSampleSize)
       const mappings = await ctx.prefetchMappings(spec.entity, sample.map((i) => spec.sourceId(i)))
       for (const item of sample) {
         if (ctx.expired()) break

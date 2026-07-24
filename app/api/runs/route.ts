@@ -70,12 +70,12 @@ export async function POST(request: NextRequest) {
 
   const { entities, added } = withDependencies(body.direction, body.entities)
 
-  // A trial samples 5 records of each type. It honours the company selection
-  // (so you can preview a specific customer) but not date ranges, which do not
-  // apply to a fixed-size sample. A live run honours everything.
+  // A trial always samples 5 random records of each selected type — no record
+  // selection or filtering. A live run honours everything. Stripping the
+  // filters here keeps that guarantee even if a client sends them.
   const isDryRun = body.mode === 'dry_run'
   const selection = isDryRun
-    ? { entities, companyIds: body.companyIds, recordIds: body.recordIds, options: body.options }
+    ? { entities, options: body.options }
     : {
         entities,
         since: body.since,

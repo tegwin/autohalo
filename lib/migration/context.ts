@@ -24,6 +24,8 @@ export class MigrationContext {
   readonly selection: RunSelection
   readonly sourceSystem: SystemKind
   readonly targetSystem: SystemKind
+  /** How many random records per entity a trial run copies. Per-org setting. */
+  readonly trialSampleSize: number
 
   private readonly deadline: number
   private logBuffer: {
@@ -41,6 +43,7 @@ export class MigrationContext {
     readonly target: AutotaskClient | HaloClient,
     deadlineMs: number,
     public entity: string,
+    trialSampleSize = 3,
   ) {
     this.orgId = run.org_id
     this.runId = run.id
@@ -50,6 +53,7 @@ export class MigrationContext {
     this.sourceSystem = run.direction === 'autotask_to_halo' ? 'autotask' : 'halo'
     this.targetSystem = run.direction === 'autotask_to_halo' ? 'halo' : 'autotask'
     this.deadline = deadlineMs
+    this.trialSampleSize = Math.max(1, Math.min(50, trialSampleSize))
   }
 
   /** True once we are close enough to the function limit to stop cleanly. */

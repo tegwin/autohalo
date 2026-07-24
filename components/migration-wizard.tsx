@@ -248,8 +248,55 @@ export function MigrationWizard({
       </div>
 
       <div className="card space-y-4">
+        <h2 className="font-semibold">2. Run type</h2>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Choice
+            active={mode === 'dry_run'}
+            onClick={() => setMode('dry_run')}
+            title="Free trial run"
+            body={
+              unlimitedTrials
+                ? 'Copies 5 random records of each selected type into the target so you can see it working. Unlimited on this account.'
+                : canRunTrial
+                  ? 'Copies 5 random records of each selected type into the target so you can see them in Halo. One free trial per account. Records are chosen at random — no picking.'
+                  : 'Your free trial has been used. Purchase a live migration, or ask an administrator to unlock another trial.'
+            }
+            disabled={!canRunTrial}
+          />
+          <Choice
+            active={mode === 'live'}
+            onClick={() => setMode('live')}
+            title="Live migration"
+            body={
+              unlimited
+                ? 'Migrates everything you select, and lets you choose exact records. No credit needed on this account.'
+                : `Migrates what you select (and lets you pick exact records). Uses 1 of your ${credits.available} credit${credits.available === 1 ? '' : 's'}. The 5 trial records are skipped, not duplicated.`
+            }
+            disabled={!canRunLive}
+          />
+        </div>
+
+        {mode === 'live' && !canRunLive ? (
+          <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            You have no migration credits. Buy one on the billing page, or ask an administrator to
+            grant one.
+          </p>
+        ) : null}
+
+        {mode === 'dry_run' && !canRunTrial ? (
+          <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            You have used your free trial run. Buy a live migration to move everything, or ask an
+            administrator to unlock another trial.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="card space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">2. What to copy</h2>
+          <h2 className="font-semibold">3. What to copy</h2>
           <div className="flex gap-2 text-sm">
             <button className="text-brand-600 hover:underline" onClick={() => setSelected(new Set(entities.map((e) => e.key)))}>
               Select all
@@ -300,9 +347,9 @@ export function MigrationWizard({
           })}
         </div>
 
-        {/* Per-entity record selection: for each chosen, pickable entity, a
-            searchable list of its records. Leaving one on "All" migrates all. */}
-        {[...selected].filter((key) => isPickable(key)).length > 0 ? (
+        {/* Per-entity record selection — LIVE runs only. A trial always takes
+            5 random per type, so picking would be meaningless there. */}
+        {mode === 'live' && [...selected].filter((key) => isPickable(key)).length > 0 ? (
           <div className="space-y-3 border-t border-ink-200 pt-4 dark:border-ink-800">
             <p className="text-sm font-medium">Choose which records (optional)</p>
             {!sourceId ? (
@@ -333,17 +380,17 @@ export function MigrationWizard({
 
         {mode === 'dry_run' ? (
           <p className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700 dark:border-brand-700/50 dark:bg-brand-700/10 dark:text-brand-200">
-            This is a <strong>trial</strong>: it copies up to <strong>5 records of each selected
-            type</strong> into the target so you can confirm it works — drawn from whatever you pick
-            above (or at random if you pick none). Those records are remembered, so your later live
-            migration skips them rather than duplicating.
+            This is a <strong>trial</strong>: it copies <strong>5 random records of each selected
+            type</strong> into the target so you can confirm it works. Records are chosen at
+            random — switch to a <strong>live migration</strong> above to pick exact records. The
+            trial records are remembered, so the live run skips them rather than duplicating.
           </p>
         ) : null}
       </div>
 
       {mode === 'live' ? (
         <div className="card space-y-4">
-          <h2 className="font-semibold">3. More options</h2>
+          <h2 className="font-semibold">4. More options</h2>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -376,49 +423,6 @@ export function MigrationWizard({
 
       <div className="card space-y-4">
         <h2 className="font-semibold">Start the run</h2>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Choice
-            active={mode === 'dry_run'}
-            onClick={() => setMode('dry_run')}
-            title="Free trial run"
-            body={
-              unlimitedTrials
-                ? 'Copies 5 random records of each selected type into the target so you can see it working. Unlimited on this account.'
-                : canRunTrial
-                  ? 'Copies 5 random records of each selected type into the target so you can see them in Halo. One free trial per account.'
-                  : 'Your free trial has been used. Purchase a live migration, or ask an administrator to unlock another trial.'
-            }
-            disabled={!canRunTrial}
-          />
-          <Choice
-            active={mode === 'live'}
-            onClick={() => setMode('live')}
-            title="Live migration"
-            body={
-              unlimited
-                ? 'Migrates everything you select. No credit needed on this account.'
-                : `Migrates everything you select. Uses 1 of your ${credits.available} credit${credits.available === 1 ? '' : 's'}. The 5 trial records are skipped, not duplicated.`
-            }
-            disabled={!canRunLive}
-          />
-        </div>
-
-        {mode === 'live' && !canRunLive ? (
-          <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            You have no migration credits. Buy one on the billing page, or ask an administrator to
-            grant one.
-          </p>
-        ) : null}
-
-        {mode === 'dry_run' && !canRunTrial ? (
-          <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            You have used your free trial run. Buy a live migration to move everything, or ask an
-            administrator to unlock another trial.
-          </p>
-        ) : null}
 
         {error ? (
           <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">

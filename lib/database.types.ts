@@ -70,6 +70,7 @@ export type OrgRow = {
   created_at: Timestamp
   unlimited: boolean
   trial_runs_remaining: number
+  trial_sample_size: number
 }
 
 export type ProfileRow = {
@@ -214,7 +215,7 @@ export type Database = {
     Tables: {
       orgs: TableDef<
         OrgRow,
-        Insertable<OrgRow, 'id' | 'created_at' | 'unlimited' | 'trial_runs_remaining'>,
+        Insertable<OrgRow, 'id' | 'created_at' | 'unlimited' | 'trial_runs_remaining' | 'trial_sample_size'>,
         Partial<OrgRow>
       >
       profiles: TableDef<

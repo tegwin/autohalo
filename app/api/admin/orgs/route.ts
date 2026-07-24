@@ -19,6 +19,11 @@ const schema = z.discriminatedUnion('action', [
     quantity: z.number().int().min(1).max(100),
   }),
   z.object({
+    action: z.literal('set_trial_size'),
+    orgId: z.string().uuid(),
+    size: z.number().int().min(1).max(50),
+  }),
+  z.object({
     action: z.literal('set_unlimited'),
     orgId: z.string().uuid(),
     unlimited: z.boolean(),
@@ -57,6 +62,15 @@ export async function POST(request: NextRequest) {
 
     if (body.action === 'grant_trial') {
       await grantTrialRuns(body.orgId, body.quantity)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (body.action === 'set_trial_size') {
+      const { error } = await supabase
+        .from('orgs')
+        .update({ trial_sample_size: body.size })
+        .eq('id', body.orgId)
+      if (error) throw new Error(error.message)
       return NextResponse.json({ ok: true })
     }
 

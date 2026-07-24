@@ -103,6 +103,15 @@ async function executeRun(run: MigrationRun, deadline: number, holder: string): 
     clientFor(run.org_id, run.target_connection),
   ])
 
+  // Per-org trial sample size (how many random records per entity a trial
+  // copies). Defaults to 3; an admin can raise it for a specific org.
+  const { data: orgRow } = await supabase
+    .from('orgs')
+    .select('trial_sample_size')
+    .eq('id', run.org_id)
+    .single<{ trial_sample_size: number }>()
+  const trialSampleSize = orgRow?.trial_sample_size ?? 3
+
   const touched: string[] = []
   let processedTotal = 0
 
@@ -164,7 +173,7 @@ async function executeRun(run: MigrationRun, deadline: number, holder: string): 
       })
       .eq('id', task.id)
 
-    const ctx = new MigrationContext(run, source, target, deadline, task.entity)
+    const ctx = new MigrationContext(run, source, target, deadline, task.entity, trialSampleSize)
 
     try {
       if (task.total_estimate === null && handler.estimate) {
