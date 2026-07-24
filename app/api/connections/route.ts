@@ -53,6 +53,23 @@ export async function POST(request: NextRequest) {
   const body = parsed.data
   const supabase = createAdminClient()
 
+  // One connection per system per org: an org migrates between exactly one
+  // Autotask and one Halo instance. Block a second of the same kind rather
+  // than let ambiguous duplicates pile up.
+  const { count: existing } = await supabase
+    .from('connections')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', ctx.org.id)
+    .eq('system', body.system)
+
+  if ((existing ?? 0) > 0) {
+    const name = body.system === 'halo' ? 'HaloPSA' : 'Autotask'
+    return NextResponse.json(
+      { error: `You already have a ${name} connection. Delete it before adding a different one.` },
+      { status: 409 },
+    )
+  }
+
   try {
     if (body.system === 'autotask') {
       // Resolve the zone from the username so the operator does not have to
@@ -134,15 +151,37 @@ export async function POST(request: NextRequest) {
   }
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function DELETE(request: NextRequest) {
   const ctx = await getSessionContext()
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!canManage(ctx)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const id = request.nextUrl.searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  // Validate before interpolating into a PostgREST filter below.
+  if (!id || !UUID.test(id)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
 
   const supabase = createAdminClient()
+
+  // A connection cannot be deleted while a run references it (FK restrict), and
+  // trial runs use it immediately — so remove this org's runs that reference
+  // it first. Those cascade to their tasks, logs and failures. id_map and
+  // entitlements de-link via ON DELETE SET NULL, so migration history of other
+  // connections is untouched.
+  const { error: runsError } = await supabase
+    .from('migration_runs')
+    .delete()
+    .eq('org_id', ctx.org.id)
+    .or(`source_connection.eq.${id},target_connection.eq.${id}`)
+
+  if (runsError) {
+    return NextResponse.json(
+      { error: `Could not remove runs using this connection: ${runsError.message}` },
+      { status: 400 },
+    )
+  }
+
   const { error } = await supabase
     .from('connections')
     .delete()

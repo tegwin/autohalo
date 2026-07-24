@@ -23,7 +23,7 @@ export function ConnectionManager({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Autotask</h2>
-          {canManage ? (
+          {canManage && autotask.length === 0 ? (
             <button className="btn-secondary" onClick={() => setAdding(adding === 'autotask' ? null : 'autotask')}>
               <Plus className="h-4 w-4" /> Add
             </button>
@@ -51,7 +51,7 @@ export function ConnectionManager({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">HaloPSA</h2>
-          {canManage ? (
+          {canManage && halo.length === 0 ? (
             <button className="btn-secondary" onClick={() => setAdding(adding === 'halo' ? null : 'halo')}>
               <Plus className="h-4 w-4" /> Add
             </button>
@@ -87,12 +87,27 @@ function ConnectionCard({ connection, canManage }: { connection: Connection; can
       ? [config.username, config.zoneUrl ?? config.endpoint].filter(Boolean).join(' · ')
       : [config.tenant, config.baseUrl].filter(Boolean).join(' · ')
 
+  const [error, setError] = useState<string | null>(null)
+
   async function remove() {
-    if (!confirm(`Delete the connection "${connection.label}"? Existing run history is kept.`)) return
+    if (
+      !confirm(
+        `Delete the connection "${connection.label}"? Any migration runs that used it will be removed too.`,
+      )
+    )
+      return
     setRemoving(true)
-    await fetch(`/api/connections?id=${connection.id}`, { method: 'DELETE' })
-    setRemoving(false)
-    router.refresh()
+    setError(null)
+    try {
+      const res = await fetch(`/api/connections?id=${connection.id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not delete the connection')
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete the connection')
+    } finally {
+      setRemoving(false)
+    }
   }
 
   return (
@@ -125,6 +140,8 @@ function ConnectionCard({ connection, canManage }: { connection: Connection; can
           </>
         )}
       </p>
+
+      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
     </div>
   )
 }
