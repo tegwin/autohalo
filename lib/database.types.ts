@@ -170,6 +170,7 @@ export type IdMapRow = {
   source_id: string
   target_system: SystemKind
   target_id: string
+  target_connection: string | null
   content_hash: string | null
   run_id: string | null
   created_at: Timestamp
@@ -309,7 +310,7 @@ export type Database = {
       >
       id_map: TableDef<
         IdMapRow,
-        Insertable<IdMapRow, 'id' | 'content_hash' | 'run_id' | 'created_at' | 'updated_at'>,
+        Insertable<IdMapRow, 'id' | 'target_connection' | 'content_hash' | 'run_id' | 'created_at' | 'updated_at'>,
         Partial<IdMapRow>
       >
       run_logs: TableDef<

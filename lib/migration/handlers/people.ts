@@ -2,6 +2,7 @@ import { baseFilter } from '../../connectors/autotask'
 import type { TaskCursor } from '../../types'
 import type { MigrationContext } from '../context'
 import { runCopySlice, type EntityHandler } from '../handler'
+import { defaultHaloSite } from '../lookups'
 import { autotaskPage, haloPage } from '../paging'
 import { buildProvenanceNote } from './companies'
 
@@ -185,7 +186,10 @@ function contactsToHalo(ctx: MigrationContext, cursor: TaskCursor) {
     async transform(c, item) {
       const clientId = await c.mapForeignKey('companies', item.companyID)
       if (!clientId) return null
-      const siteId = await c.mapForeignKey('sites', item.companyLocationID)
+      // Halo requires a site on every user. Use the mapped location's site, or
+      // fall back to the client's Main site (which Halo creates automatically).
+      const mappedSite = await c.mapForeignKey('sites', item.companyLocationID)
+      const siteId = mappedSite ? Number(mappedSite) : await defaultHaloSite(c, Number(clientId))
 
       const name = `${item.firstName ?? ''} ${item.lastName ?? ''}`.trim() || item.emailAddress || `Contact ${item.id}`
 
@@ -194,7 +198,7 @@ function contactsToHalo(ctx: MigrationContext, cursor: TaskCursor) {
         firstname: item.firstName ?? undefined,
         surname: item.lastName ?? undefined,
         client_id: Number(clientId),
-        site_id: siteId ? Number(siteId) : undefined,
+        site_id: siteId ?? undefined,
         emailaddress: item.emailAddress ?? undefined,
         phonenumber: item.phone ?? undefined,
         mobilenumber: item.mobilePhone ?? undefined,

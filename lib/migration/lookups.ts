@@ -139,9 +139,38 @@ export async function haloTicketTypes(ctx: MigrationContext): Promise<HaloTicket
   return resolved
 }
 
+/**
+ * The default (Main) Halo site for a client.
+ *
+ * Halo requires a site on every end user and on tickets. When it creates a
+ * Client it auto-creates a "Main" site; we look that up and reuse it whenever a
+ * record has no more specific site mapped from an Autotask location. Without
+ * this, user creates fail with "A Site must be selected".
+ */
+const siteByClient = new Map<number, number | null>()
+
+export async function defaultHaloSite(ctx: MigrationContext, haloClientId: number): Promise<number | null> {
+  if (siteByClient.has(haloClientId)) return siteByClient.get(haloClientId) ?? null
+  let siteId: number | null = null
+  try {
+    const sites = await ctx.halo.getAll<{ id: number; name?: string }>(
+      'Site',
+      { client_id: haloClientId },
+      100,
+    )
+    const main = sites.find((s) => normalise(s.name ?? '') === 'main') ?? sites[0]
+    siteId = main?.id ?? null
+  } catch {
+    siteId = null
+  }
+  siteByClient.set(haloClientId, siteId)
+  return siteId
+}
+
 /** Clears memoised lookups. Called when a run finishes so a later run in the
  *  same warm lambda re-reads reference data the customer may have changed. */
 export function clearLookupCaches(): void {
   memo.clear()
   ticketTypeCache.clear()
+  siteByClient.clear()
 }

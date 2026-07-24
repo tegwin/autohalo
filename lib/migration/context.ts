@@ -24,6 +24,9 @@ export class MigrationContext {
   readonly selection: RunSelection
   readonly sourceSystem: SystemKind
   readonly targetSystem: SystemKind
+  /** The target connection this run writes to. id_map is scoped to it, so a
+   *  different Halo/Autotask instance never reuses another's mappings. */
+  readonly targetConnectionId: string
   /** How many random records per entity a trial run copies. Per-org setting. */
   readonly trialSampleSize: number
 
@@ -52,6 +55,7 @@ export class MigrationContext {
     this.selection = run.selection ?? { entities: [] }
     this.sourceSystem = run.direction === 'autotask_to_halo' ? 'autotask' : 'halo'
     this.targetSystem = run.direction === 'autotask_to_halo' ? 'halo' : 'autotask'
+    this.targetConnectionId = run.target_connection
     this.deadline = deadlineMs
     this.trialSampleSize = Math.max(1, Math.min(50, trialSampleSize))
   }
@@ -102,6 +106,7 @@ export class MigrationContext {
       .eq('source_system', this.sourceSystem)
       .eq('source_id', String(sourceId))
       .eq('target_system', this.targetSystem)
+      .eq('target_connection', this.targetConnectionId)
       .maybeSingle<{ target_id: string; content_hash: string | null }>()
     return data ? { targetId: data.target_id, hash: data.content_hash } : null
   }
@@ -131,10 +136,11 @@ export class MigrationContext {
         source_id: String(sourceId),
         target_system: this.targetSystem,
         target_id: String(targetId),
+        target_connection: this.targetConnectionId,
         content_hash: contentHash(payload),
         run_id: this.runId,
       },
-      { onConflict: 'org_id,entity,source_system,source_id,target_system' },
+      { onConflict: 'org_id,entity,source_system,source_id,target_system,target_connection' },
     )
   }
 
@@ -154,6 +160,7 @@ export class MigrationContext {
         .eq('entity', entity)
         .eq('source_system', this.sourceSystem)
         .eq('target_system', this.targetSystem)
+        .eq('target_connection', this.targetConnectionId)
         .in('source_id', chunk)
       for (const row of (data ?? []) as { source_id: string; target_id: string; content_hash: string | null }[]) {
         out.set(row.source_id, { targetId: row.target_id, hash: row.content_hash })

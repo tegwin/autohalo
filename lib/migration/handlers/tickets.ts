@@ -2,7 +2,7 @@ import { baseFilter } from '../../connectors/autotask'
 import type { TaskCursor } from '../../types'
 import type { MigrationContext } from '../context'
 import { runCopySlice, type EntityHandler } from '../handler'
-import { autotaskLabel, autotaskPicklistId, haloIdForLabel, haloTicketTypes } from '../lookups'
+import { autotaskLabel, autotaskPicklistId, defaultHaloSite, haloIdForLabel, haloTicketTypes } from '../lookups'
 import { autotaskPage, haloPage } from '../paging'
 
 export interface AutotaskTicket {
@@ -153,18 +153,21 @@ function ticketsToHalo(ctx: MigrationContext, cursor: TaskCursor) {
         haloIdForLabel(c, 'Priority', priorityLabel, null),
       ])
 
-      const [userId, siteId, agentId, projectId] = await Promise.all([
+      const [userId, mappedSite, agentId, projectId] = await Promise.all([
         c.mapForeignKey('contacts', item.contactID),
         c.mapForeignKey('sites', item.companyLocationID),
         c.mapForeignKey('agents', item.assignedResourceID),
         c.mapForeignKey('projects', item.projectID),
       ])
+      // Fall back to the client's Main site when the ticket's location did not
+      // migrate, so Halo always has a valid site to attach the ticket to.
+      const siteId = mappedSite ? Number(mappedSite) : await defaultHaloSite(c, Number(clientId))
 
       return {
         summary: item.title,
         details: item.description ?? '',
         client_id: Number(clientId),
-        site_id: siteId ? Number(siteId) : undefined,
+        site_id: siteId ?? undefined,
         user_id: userId ? Number(userId) : undefined,
         agent_id: agentId ? Number(agentId) : undefined,
         status_id: statusId ?? undefined,

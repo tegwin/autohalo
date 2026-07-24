@@ -136,6 +136,7 @@ async function nextParents(
     .eq('entity', entity)
     .eq('source_system', ctx.sourceSystem)
     .eq('target_system', ctx.targetSystem)
+    .eq('target_connection', ctx.targetConnectionId)
     .order('source_id', { ascending: true })
     .limit(PARENT_BATCH)
 
