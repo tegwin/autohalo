@@ -1,15 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Check, Loader2, Search, X } from 'lucide-react'
-import type { SourceRecord } from '@/lib/source-browse'
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import type { GridResult, GridRow } from '@/lib/source-browse'
 
 /**
- * Searchable, multi-select picker for one entity, backed by the live source
- * system. "All" is the default and selects nothing (meaning: migrate them
- * all); "Choose specific" opens a searchable, paged list. Selections are held
- * by id with a cached label so chosen rows stay readable after the search box
- * is cleared or narrowed.
+ * Grid picker for one entity, modelled on the PHP importer's table: a paged
+ * grid of the source records with a filter box per column, a select-all
+ * header checkbox, and row checkboxes. "All" is the default (select nothing =
+ * migrate everything); "Choose specific" opens the grid. Selections are held
+ * by id with a cached label so ticked rows survive filtering and paging.
  */
 export function RecordPicker({
   connectionId,
@@ -29,27 +29,31 @@ export function RecordPicker({
   scopeNote?: string
 }) {
   const [mode, setMode] = useState<'all' | 'specific'>(selected.size ? 'specific' : 'all')
-  const [search, setSearch] = useState('')
-  const [results, setResults] = useState<SourceRecord[]>([])
+  const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState<Record<string, string>>({})
+  const [data, setData] = useState<GridResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(
-    async (term: string) => {
+    async (pageNo: number, activeFilters: Record<string, string>) => {
       if (!connectionId) return
       setLoading(true)
       setError(null)
       try {
-        const params = new URLSearchParams({ connectionId })
-        if (term) params.set('search', term)
+        const params = new URLSearchParams({ connectionId, page: String(pageNo) })
+        const nonEmpty = Object.fromEntries(
+          Object.entries(activeFilters).filter(([, v]) => v.trim()),
+        )
+        if (Object.keys(nonEmpty).length) params.set('filters', JSON.stringify(nonEmpty))
         const res = await fetch(`/api/source/${entity}?${params.toString()}`, { cache: 'no-store' })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Could not load records')
-        setResults(json.items as SourceRecord[])
+        setData(json as GridResult)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not load records')
-        setResults([])
+        setData(null)
       } finally {
         setLoading(false)
       }
@@ -57,19 +61,40 @@ export function RecordPicker({
     [connectionId, entity],
   )
 
+  // Load when opened or when the page changes.
+  useEffect(() => {
+    if (mode !== 'specific') return
+    void load(page, filters)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, page])
+
+  // Debounce filter typing; a filter change resets to page 1.
   useEffect(() => {
     if (mode !== 'specific') return
     if (debounce.current) clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => void load(search), 300)
+    debounce.current = setTimeout(() => {
+      if (page !== 1) setPage(1)
+      else void load(1, filters)
+    }, 350)
     return () => {
       if (debounce.current) clearTimeout(debounce.current)
     }
-  }, [search, mode, load])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters])
 
-  function toggle(record: SourceRecord) {
+  function toggleRow(row: GridRow) {
     const next = new Map(selected)
-    if (next.has(record.id)) next.delete(record.id)
-    else next.set(record.id, record.label)
+    if (next.has(row._id)) next.delete(row._id)
+    else next.set(row._id, row._label)
+    onChange(next)
+  }
+
+  function toggleAllOnPage(check: boolean) {
+    const next = new Map(selected)
+    for (const row of data?.rows ?? []) {
+      if (check) next.set(row._id, row._label)
+      else next.delete(row._id)
+    }
     onChange(next)
   }
 
@@ -78,103 +103,133 @@ export function RecordPicker({
     if (next === 'all') onChange(new Map())
   }
 
+  const rows = data?.rows ?? []
+  const columns = data?.columns ?? []
+  const allOnPageChecked = rows.length > 0 && rows.every((r) => selected.has(r._id))
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <ModeButton active={mode === 'all'} onClick={() => switchMode('all')}>
           {allLabel}
         </ModeButton>
         <ModeButton active={mode === 'specific'} onClick={() => switchMode('specific')}>
           {chooseLabel}
         </ModeButton>
+        {mode === 'specific' && selected.size > 0 ? (
+          <span className="ml-1 text-sm text-ink-600 dark:text-ink-300">
+            {selected.size} selected
+            <button onClick={() => onChange(new Map())} className="ml-2 text-xs text-ink-500 hover:underline">
+              clear
+            </button>
+          </span>
+        ) : null}
       </div>
 
       {mode === 'all' ? (
         scopeNote ? <p className="hint">{scopeNote}</p> : null
       ) : (
         <>
-          {selected.size > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {[...selected.entries()].map(([id, label]) => (
-                <span
-                  key={id}
-                  className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-700 dark:bg-brand-700/20 dark:text-brand-200"
-                >
-                  {label}
-                  <button
-                    onClick={() => {
-                      const next = new Map(selected)
-                      next.delete(id)
-                      onChange(next)
-                    }}
-                    className="hover:text-brand-900 dark:hover:text-white"
-                    aria-label={`Remove ${label}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-              <button
-                onClick={() => onChange(new Map())}
-                className="text-xs text-ink-500 hover:underline dark:text-ink-400"
-              >
-                Clear all
-              </button>
-            </div>
-          ) : (
-            <p className="hint">Nothing selected yet — search and tick the records to migrate.</p>
-          )}
-
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <input
-              className="input pl-9"
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-          <div className="max-h-72 overflow-y-auto rounded-lg border border-ink-200 dark:border-ink-700">
-            {loading ? (
-              <p className="flex items-center gap-2 p-3 text-sm text-ink-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-              </p>
-            ) : results.length === 0 ? (
-              <p className="p-3 text-sm text-ink-500">No matches.</p>
-            ) : (
-              <ul>
-                {results.map((record) => {
-                  const isSelected = selected.has(record.id)
-                  return (
-                    <li key={record.id}>
-                      <button
-                        onClick={() => toggle(record)}
-                        className="flex w-full items-center gap-3 border-b border-ink-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-ink-50 dark:border-ink-800 dark:hover:bg-ink-800/60"
-                      >
-                        <span
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                            isSelected
-                              ? 'border-brand-600 bg-brand-600 text-white'
-                              : 'border-ink-300 dark:border-ink-600'
-                          }`}
-                        >
-                          {isSelected ? <Check className="h-3 w-3" /> : null}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium">{record.label}</span>
-                          {record.sub ? <span className="hint block truncate">{record.sub}</span> : null}
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
+          <div className="overflow-x-auto rounded-lg border border-ink-200 dark:border-ink-700">
+            <table className="w-full min-w-[40rem] text-left text-sm">
+              <thead>
+                <tr className="border-b border-ink-200 dark:border-ink-700">
+                  <th className="w-10 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={allOnPageChecked}
+                      onChange={(e) => toggleAllOnPage(e.target.checked)}
+                      aria-label="Select all on this page"
+                    />
+                  </th>
+                  {columns.map((col) => (
+                    <th key={col} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400">
+                      {col}
+                    </th>
+                  ))}
+                </tr>
+                <tr className="border-b border-ink-200 dark:border-ink-700">
+                  <th className="px-3 py-1.5" />
+                  {columns.map((col) => (
+                    <th key={col} className="px-2 py-1.5">
+                      <input
+                        className="input h-7 py-1 text-xs"
+                        placeholder="filter…"
+                        value={filters[col] ?? ''}
+                        onChange={(e) => setFilters((prev) => ({ ...prev, [col]: e.target.value }))}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={columns.length + 1} className="px-3 py-6 text-center text-ink-500">
+                      <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length + 1} className="px-3 py-6 text-center text-ink-500">
+                      No matching records.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row) => (
+                    <tr
+                      key={row._id}
+                      className="cursor-pointer border-b border-ink-100 last:border-b-0 hover:bg-ink-50 dark:border-ink-800 dark:hover:bg-ink-800/50"
+                      onClick={() => toggleRow(row)}
+                    >
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={selected.has(row._id)}
+                          onChange={() => toggleRow(row)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+                      {columns.map((col) => (
+                        <td key={col} className="px-3 py-2 text-ink-700 dark:text-ink-200">
+                          {row[col]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-          <p className="hint">Showing up to 50 matches — refine the search to find more.</p>
+
+          {data ? (
+            <div className="flex items-center justify-between text-sm">
+              <span className="hint">{data.total.toLocaleString('en-GB')} total</span>
+              <div className="flex items-center gap-3">
+                <button
+                  className="btn-secondary px-2 py-1"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" /> Prev
+                </button>
+                <span>
+                  Page {data.page} of {data.totalPages}
+                </span>
+                <button
+                  className="btn-secondary px-2 py-1"
+                  disabled={page >= data.totalPages || loading}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </div>

@@ -152,6 +152,19 @@ export class AutotaskClient {
     })
   }
 
+  /**
+   * Random-access page for the wizard's data grid. Autotask's GET query
+   * accepts a page number, which lets the grid jump backwards and show
+   * "Page N of M" — the keyset paging the engine uses cannot go backwards.
+   */
+  async queryByPage<T>(entity: string, query: AutotaskQuery, pageNo: number): Promise<AutotaskPage<T>> {
+    const search = encodeURIComponent(JSON.stringify(query))
+    return request<AutotaskPage<T>>(
+      `${this.baseUrl}/${entity}/query?search=${search}&page=${Math.max(1, pageNo)}`,
+      { headers: this.headers },
+    )
+  }
+
   /** Walks every page of a query. Only for small sets — the engine pages. */
   async queryAll<T>(entity: string, query: AutotaskQuery, cap = 5000): Promise<T[]> {
     const out: T[] = []
