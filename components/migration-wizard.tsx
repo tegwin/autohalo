@@ -3,8 +3,45 @@
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { ArrowRight, Loader2, ShieldAlert } from 'lucide-react'
-import { CompanyPicker } from '@/components/company-picker'
+import { RecordPicker } from '@/components/record-picker'
 import type { Connection, Direction } from '@/lib/types'
+
+/**
+ * Entities that can be picked record-by-record, and the copy that labels each
+ * picker. Kept in sync with BROWSE_CONFIG on the server. Company-owned entities
+ * carry a note that they are also scoped by the Customers selection.
+ */
+const PICKERS: Record<string, { all: string; choose: string; note?: string }> = {
+  companies: {
+    all: 'All companies',
+    choose: 'Choose specific companies',
+    note: 'Choosing companies also scopes their contacts, sites, tickets, projects, opportunities and contracts.',
+  },
+  contacts: { all: 'All contacts', choose: 'Choose specific contacts' },
+  products: { all: 'All products', choose: 'Choose specific products' },
+  tickets: { all: 'All tickets', choose: 'Choose specific tickets' },
+  projects: { all: 'All projects', choose: 'Choose specific projects' },
+  opportunities: { all: 'All opportunities', choose: 'Choose specific opportunities' },
+  contracts: { all: 'All contracts', choose: 'Choose specific contracts' },
+  kb_articles: { all: 'All KB articles', choose: 'Choose specific KB articles' },
+}
+
+/** Halo-as-source currently supports browsing only these. */
+const HALO_BROWSABLE = new Set(['companies', 'contacts'])
+
+/**
+ * Explicit per-entity record ids for the run body. The Customers picker is
+ * excluded because it travels as companyIds (which also scopes related data);
+ * every other entity with a non-empty selection becomes recordIds[entity].
+ */
+function buildRecordIds(scope: Record<string, Map<string, string>>): Record<string, string[]> | undefined {
+  const out: Record<string, string[]> = {}
+  for (const [entity, map] of Object.entries(scope)) {
+    if (entity === 'companies') continue
+    if (map.size) out[entity] = [...map.keys()]
+  }
+  return Object.keys(out).length ? out : undefined
+}
 
 interface EntityOption {
   key: string
@@ -31,8 +68,9 @@ export function MigrationWizard({
   const [selected, setSelected] = useState<Set<string>>(new Set(['companies', 'contacts', 'tickets']))
   const [since, setSince] = useState('')
   const [until, setUntil] = useState('')
-  // Chosen companies to scope a live run to, id -> display label. Empty = all.
-  const [companyScope, setCompanyScope] = useState<Map<string, string>>(new Map())
+  // Per-entity chosen records: entity key -> (source id -> display label).
+  // Empty map for an entity means "all of that entity".
+  const [recordScope, setRecordScope] = useState<Record<string, Map<string, string>>>({})
   const [createAgents, setCreateAgents] = useState(false)
   const [includeTime, setIncludeTime] = useState(true)
   const [includeNotes, setIncludeNotes] = useState(true)
@@ -96,11 +134,21 @@ export function MigrationWizard({
     )
     setSourceId(nextSources[0]?.id ?? '')
     setTargetId(nextTargets[0]?.id ?? '')
-    // Company ids are source-specific; clear them when the source changes.
-    setCompanyScope(new Map())
+    // Record selections are source-specific; clear them when the source changes.
+    setRecordScope({})
     // Drop selections the new direction cannot service.
     const allowed = new Set(entitiesByDirection[next].map((e) => e.key))
     setSelected((prev) => new Set([...prev].filter((key) => allowed.has(key))))
+  }
+
+  function setEntityScope(entity: string, next: Map<string, string>) {
+    setRecordScope((prev) => ({ ...prev, [entity]: next }))
+  }
+
+  /** True when this entity offers a record picker in the current direction. */
+  function isPickable(entity: string): boolean {
+    if (!(entity in PICKERS)) return false
+    return sourceSystem === 'autotask' || HALO_BROWSABLE.has(entity)
   }
 
   async function start() {
@@ -118,7 +166,12 @@ export function MigrationWizard({
           entities: [...selected],
           since: since || undefined,
           until: until || undefined,
-          companyIds: companyScope.size ? [...companyScope.keys()] : undefined,
+          // The Customers picker scopes everything company-owned, so it maps to
+          // companyIds. Every other entity's picker maps to explicit recordIds.
+          companyIds: recordScope.companies?.size
+            ? [...recordScope.companies.keys()]
+            : undefined,
+          recordIds: buildRecordIds(recordScope),
           options: {
             agents: { createAgents },
             tickets: { includeTimeEntries: includeTime, includeNotes },
@@ -164,7 +217,7 @@ export function MigrationWizard({
               value={sourceId}
               onChange={(e) => {
                 setSourceId(e.target.value)
-                setCompanyScope(new Map())
+                setRecordScope({})
               }}
             >
               {sources.map((c) => (
@@ -246,21 +299,42 @@ export function MigrationWizard({
             )
           })}
         </div>
-      </div>
 
-      <div className="card space-y-4">
-        <h2 className="font-semibold">3. Which companies</h2>
-
-        {sourceId ? (
-          <CompanyPicker connectionId={sourceId} selected={companyScope} onChange={setCompanyScope} />
-        ) : (
-          <p className="hint">Choose a source connection first.</p>
-        )}
+        {/* Per-entity record selection: for each chosen, pickable entity, a
+            searchable list of its records. Leaving one on "All" migrates all. */}
+        {[...selected].filter((key) => isPickable(key)).length > 0 ? (
+          <div className="space-y-3 border-t border-ink-200 pt-4 dark:border-ink-800">
+            <p className="text-sm font-medium">Choose which records (optional)</p>
+            {!sourceId ? (
+              <p className="hint">Choose a source connection first.</p>
+            ) : (
+              entities
+                .filter((e) => selected.has(e.key) && isPickable(e.key))
+                .map((e) => {
+                  const cfg = PICKERS[e.key]!
+                  return (
+                    <div key={e.key} className="rounded-lg border border-ink-200 p-3 dark:border-ink-700">
+                      <p className="mb-2 text-sm font-medium">{e.label}</p>
+                      <RecordPicker
+                        connectionId={sourceId}
+                        entity={e.key}
+                        selected={recordScope[e.key] ?? new Map()}
+                        onChange={(next) => setEntityScope(e.key, next)}
+                        allLabel={cfg.all}
+                        chooseLabel={cfg.choose}
+                        scopeNote={cfg.note}
+                      />
+                    </div>
+                  )
+                })
+            )}
+          </div>
+        ) : null}
 
         {mode === 'dry_run' ? (
           <p className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700 dark:border-brand-700/50 dark:bg-brand-700/10 dark:text-brand-200">
             This is a <strong>trial</strong>: it copies up to <strong>5 records of each selected
-            type</strong> into Halo so you can confirm it works — drawn from the companies you pick
+            type</strong> into the target so you can confirm it works — drawn from whatever you pick
             above (or at random if you pick none). Those records are remembered, so your later live
             migration skips them rather than duplicating.
           </p>
@@ -269,7 +343,7 @@ export function MigrationWizard({
 
       {mode === 'live' ? (
         <div className="card space-y-4">
-          <h2 className="font-semibold">4. Options</h2>
+          <h2 className="font-semibold">3. More options</h2>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

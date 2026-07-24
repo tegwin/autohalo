@@ -151,7 +151,7 @@ function projectsToHalo(ctx: MigrationContext, cursor: TaskCursor, templatesOnly
   return runCopySlice<AutotaskProject>(ctx, cursor, {
     entity,
     async fetchPage(c, cur) {
-      return autotaskPage<AutotaskProject>(c, 'Projects', await projectFilter(c, templatesOnly), cur)
+      return autotaskPage<AutotaskProject>(c, 'Projects', await projectFilter(c, templatesOnly), cur, entity)
     },
     sourceId: (i) => String(i.id),
     sourceName: (i) => i.projectName,

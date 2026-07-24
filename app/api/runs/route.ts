@@ -19,6 +19,7 @@ const createSchema = z.object({
   since: z.string().optional(),
   until: z.string().optional(),
   companyIds: z.array(z.string()).optional(),
+  recordIds: z.record(z.string(), z.array(z.string())).optional(),
   options: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
 })
 
@@ -74,12 +75,13 @@ export async function POST(request: NextRequest) {
   // apply to a fixed-size sample. A live run honours everything.
   const isDryRun = body.mode === 'dry_run'
   const selection = isDryRun
-    ? { entities, companyIds: body.companyIds, options: body.options }
+    ? { entities, companyIds: body.companyIds, recordIds: body.recordIds, options: body.options }
     : {
         entities,
         since: body.since,
         until: body.until,
         companyIds: body.companyIds,
+        recordIds: body.recordIds,
         options: body.options,
       }
 

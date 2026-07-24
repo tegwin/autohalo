@@ -84,7 +84,7 @@ function buildFilter(ctx: MigrationContext) {
 function autotaskToHalo(ctx: MigrationContext, cursor: TaskCursor) {
   return runCopySlice<AutotaskCompany>(ctx, cursor, {
     entity: 'companies',
-    fetchPage: (c, cur) => autotaskPage<AutotaskCompany>(c, 'Companies', buildFilter(c), cur),
+    fetchPage: (c, cur) => autotaskPage<AutotaskCompany>(c, 'Companies', buildFilter(c), cur, 'companies'),
     sourceId: (item) => String(item.id),
     sourceName: (item) => item.companyName,
 

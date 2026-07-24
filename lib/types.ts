@@ -99,8 +99,15 @@ export interface RunSelection {
   /** Only migrate records created on/after this ISO date. */
   since?: string
   until?: string
-  /** Restrict to specific source company ids. Empty means all. */
+  /** Restrict to specific source company ids. Empty means all. Scopes every
+   *  company-owned entity (contacts, tickets, projects, …) as well. */
   companyIds?: string[]
+  /**
+   * Explicit per-entity record selection, keyed by handler entity key to a
+   * list of source ids. When present for an entity, only those records are
+   * migrated (layered on top of any company scope). Absent/empty means all.
+   */
+  recordIds?: Record<string, string[]>
   /** Per-entity overrides, e.g. { tickets: { includeTimeEntries: false } }. */
   options?: Record<string, Record<string, unknown>>
 }

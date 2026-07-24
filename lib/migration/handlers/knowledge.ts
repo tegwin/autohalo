@@ -72,6 +72,7 @@ export const kbArticlesHandler: EntityHandler = {
             'KnowledgeBaseArticles',
             [{ op: 'exist', field: 'id' }],
             cur,
+            'kb_articles',
           ),
         sourceId: (i) => String(i.id),
         sourceName: (i) => titleOf(i),

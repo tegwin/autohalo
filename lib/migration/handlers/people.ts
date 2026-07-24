@@ -178,7 +178,7 @@ function contactFilter(ctx: MigrationContext) {
 function contactsToHalo(ctx: MigrationContext, cursor: TaskCursor) {
   return runCopySlice<AutotaskContact>(ctx, cursor, {
     entity: 'contacts',
-    fetchPage: (c, cur) => autotaskPage<AutotaskContact>(c, 'Contacts', contactFilter(c), cur),
+    fetchPage: (c, cur) => autotaskPage<AutotaskContact>(c, 'Contacts', contactFilter(c), cur, 'contacts'),
     sourceId: (i) => String(i.id),
     sourceName: (i) => `${i.firstName ?? ''} ${i.lastName ?? ''}`.trim() || i.emailAddress || `#${i.id}`,
 

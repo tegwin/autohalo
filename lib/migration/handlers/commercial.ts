@@ -64,6 +64,7 @@ export const opportunitiesHandler: EntityHandler = {
               companyField: 'companyID',
             }),
             cur,
+            'opportunities',
           ),
         sourceId: (i) => String(i.id),
         sourceName: (i) => i.title,
@@ -186,6 +187,7 @@ export const contractsHandler: EntityHandler = {
             since: c.selection.since,
           }),
           cur,
+          'contracts',
         ),
       sourceId: (i) => String(i.id),
       sourceName: (i) => i.contractName,
@@ -249,7 +251,7 @@ export const productsHandler: EntityHandler = {
     return runCopySlice<AutotaskProduct>(ctx, cursor, {
       entity: 'products',
       fetchPage: (c, cur) =>
-        autotaskPage<AutotaskProduct>(c, 'Products', [{ op: 'exist', field: 'id' }], cur),
+        autotaskPage<AutotaskProduct>(c, 'Products', [{ op: 'exist', field: 'id' }], cur, 'products'),
       sourceId: (i) => String(i.id),
       sourceName: (i) => i.name,
 

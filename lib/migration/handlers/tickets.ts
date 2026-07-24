@@ -133,7 +133,7 @@ function ticketsToHalo(ctx: MigrationContext, cursor: TaskCursor) {
 
   return runCopySlice<AutotaskTicket>(ctx, cursor, {
     entity: 'tickets',
-    fetchPage: (c, cur) => autotaskPage<AutotaskTicket>(c, 'Tickets', ticketFilter(c), cur),
+    fetchPage: (c, cur) => autotaskPage<AutotaskTicket>(c, 'Tickets', ticketFilter(c), cur, 'tickets'),
     sourceId: (i) => String(i.id),
     sourceName: (i) => i.title,
 

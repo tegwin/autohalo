@@ -18,13 +18,22 @@ export async function autotaskPage<T extends { id: number }>(
   entity: string,
   filter: AutotaskFilter[],
   cursor: TaskCursor,
+  scopeKey?: string,
 ): Promise<{ items: T[]; cursor: TaskCursor; done: boolean }> {
   if (cursor.drained) return { items: [], cursor, done: true }
 
   const lastId = Number((cursor.extra?.lastId as number | undefined) ?? 0)
+  const fullFilter: AutotaskFilter[] = [...filter, { op: 'gt', field: 'id', value: lastId }]
+
+  // Explicit per-entity record selection: restrict to the chosen source ids.
+  const picked = scopeKey ? ctx.selection.recordIds?.[scopeKey] : undefined
+  if (picked?.length) {
+    fullFilter.push({ op: 'in', field: 'id', value: picked.map(Number) })
+  }
+
   const page = await ctx.autotask.queryPage<T>(entity, {
     MaxRecords: AUTOTASK_PAGE_SIZE,
-    filter: [...filter, { op: 'gt', field: 'id', value: lastId }],
+    filter: fullFilter,
   })
 
   const items = [...page.items].sort((a, b) => a.id - b.id)
