@@ -1,6 +1,7 @@
 import { createAdminClient } from '../supabase/admin'
 import { contentHash } from '../crypto'
 import { AutotaskClient } from '../connectors/autotask'
+import { ApiError } from '../connectors/http'
 import { HaloClient } from '../connectors/halo'
 import type {
   Direction,
@@ -191,15 +192,28 @@ export class MigrationContext {
     error: unknown,
     payload?: unknown,
   ): Promise<void> {
-    const message = error instanceof Error ? error.message : String(error)
     await createAdminClient().from('run_failures').insert({
       run_id: this.runId,
       org_id: this.orgId,
       entity,
       source_id: sourceId,
       source_name: sourceName,
-      error: message.slice(0, 4000),
+      error: describeError(error).slice(0, 4000),
       payload: (payload ?? null) as Record<string, unknown> | null,
     })
   }
+}
+
+/**
+ * Turns an error into a message that includes the API's own response body,
+ * which is where Halo and Autotask put the actual reason (a missing required
+ * field, a permission problem, a bad reference). Without this, failures read
+ * as a bare "failed with 400" and are impossible to act on.
+ */
+function describeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    const body = error.body?.trim()
+    return body ? `${error.message} — ${body}` : error.message
+  }
+  return error instanceof Error ? error.message : String(error)
 }

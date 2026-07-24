@@ -92,33 +92,19 @@ function autotaskToHalo(ctx: MigrationContext, cursor: TaskCursor) {
       const typeLabel = await autotaskLabel(c, 'Companies', 'companyType', item.companyType)
       const parentId = await c.mapForeignKey('companies', item.parentCompanyID)
 
-      return {
+      // Minimal, well-supported Client fields only. The address and phone are
+      // migrated separately as Halo Sites (from Autotask CompanyLocations), so
+      // there is no nested site payload here — Halo creates the Main site.
+      const payload: Record<string, unknown> = {
         name: item.companyName,
         inactive: item.isActive === false,
-        website: item.webAddress ?? undefined,
-        accountsid: item.companyNumber ?? undefined,
-        taxreference: item.taxID ?? undefined,
-        // Halo hangs sub-clients off a top level client.
-        toplevel_id: parentId ? Number(parentId) : undefined,
-        client_to_invoice: undefined,
-        // Carry the Autotask identity so a later reverse run can recognise it.
         notes: buildProvenanceNote('Autotask company', item.id, typeLabel),
-        // Halo accepts a nested site array on create and applies it to Main.
-        sites: [
-          {
-            name: 'Main',
-            phonenumber: item.phone ?? undefined,
-            fax: item.fax ?? undefined,
-            delivery_address: {
-              line1: item.address1 ?? undefined,
-              line2: item.address2 ?? undefined,
-              line3: item.city ?? undefined,
-              line4: item.state ?? undefined,
-              postcode: item.postalCode ?? undefined,
-            },
-          },
-        ],
       }
+      if (item.webAddress) payload.website = item.webAddress
+      if (item.companyNumber) payload.accountsid = item.companyNumber
+      // Only set a parent when we actually migrated one; a bad/0 id 400s Halo.
+      if (parentId) payload.toplevel_id = Number(parentId)
+      return payload
     },
 
     async write(c, payload, existingTargetId) {
