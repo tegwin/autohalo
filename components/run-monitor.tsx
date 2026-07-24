@@ -106,7 +106,7 @@ export function RunMonitor({
             ) : null}
             {ACTIVE_STATES.has(run.status) || run.status === 'paused' ? (
               <button className="btn-danger" onClick={() => act('cancel')} disabled={busy}>
-                <Ban className="h-4 w-4" /> Cancel
+                <Ban className="h-4 w-4" /> Stop
               </button>
             ) : null}
           </div>
@@ -126,7 +126,7 @@ export function RunMonitor({
         <Stat label="Failed" value={totals.failed ?? 0} tone={totals.failed ? 'red' : 'ink'} />
       </div>
 
-      <div className="flex gap-1 border-b border-ink-200 text-sm dark:border-ink-800">
+      <div className="flex items-center gap-1 border-b border-ink-200 text-sm dark:border-ink-800">
         <Tab active={tab === 'progress'} onClick={() => setTab('progress')}>
           Progress
         </Tab>
@@ -136,6 +136,17 @@ export function RunMonitor({
         <Tab active={tab === 'failures'} onClick={() => setTab('failures')}>
           Failed records {failureCount ? `(${failureCount})` : ''}
         </Tab>
+
+        {/* Always-in-view stop control while a run is active. */}
+        {canManage && (ACTIVE_STATES.has(run.status) || run.status === 'paused') ? (
+          <button
+            className="btn-danger ml-auto mb-1"
+            onClick={() => act('cancel')}
+            disabled={busy}
+          >
+            <Ban className="h-4 w-4" /> Stop run
+          </button>
+        ) : null}
       </div>
 
       {tab === 'progress' ? <ProgressTable tasks={tasks} /> : null}

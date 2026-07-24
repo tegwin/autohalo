@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { ArrowRight, Loader2, ShieldAlert } from 'lucide-react'
+import { CompanyPicker } from '@/components/company-picker'
 import type { Connection, Direction } from '@/lib/types'
 
 interface EntityOption {
@@ -30,6 +31,8 @@ export function MigrationWizard({
   const [selected, setSelected] = useState<Set<string>>(new Set(['companies', 'contacts', 'tickets']))
   const [since, setSince] = useState('')
   const [until, setUntil] = useState('')
+  // Chosen companies to scope a live run to, id -> display label. Empty = all.
+  const [companyScope, setCompanyScope] = useState<Map<string, string>>(new Map())
   const [createAgents, setCreateAgents] = useState(false)
   const [includeTime, setIncludeTime] = useState(true)
   const [includeNotes, setIncludeNotes] = useState(true)
@@ -93,6 +96,8 @@ export function MigrationWizard({
     )
     setSourceId(nextSources[0]?.id ?? '')
     setTargetId(nextTargets[0]?.id ?? '')
+    // Company ids are source-specific; clear them when the source changes.
+    setCompanyScope(new Map())
     // Drop selections the new direction cannot service.
     const allowed = new Set(entitiesByDirection[next].map((e) => e.key))
     setSelected((prev) => new Set([...prev].filter((key) => allowed.has(key))))
@@ -113,6 +118,7 @@ export function MigrationWizard({
           entities: [...selected],
           since: since || undefined,
           until: until || undefined,
+          companyIds: companyScope.size ? [...companyScope.keys()] : undefined,
           options: {
             agents: { createAgents },
             tickets: { includeTimeEntries: includeTime, includeNotes },
@@ -156,7 +162,10 @@ export function MigrationWizard({
               id="source"
               className="input"
               value={sourceId}
-              onChange={(e) => setSourceId(e.target.value)}
+              onChange={(e) => {
+                setSourceId(e.target.value)
+                setCompanyScope(new Map())
+              }}
             >
               {sources.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -251,6 +260,19 @@ export function MigrationWizard({
           </p>
         ) : (
           <>
+            <div>
+              <label className="label">Which companies</label>
+              {sourceId ? (
+                <CompanyPicker
+                  connectionId={sourceId}
+                  selected={companyScope}
+                  onChange={setCompanyScope}
+                />
+              ) : (
+                <p className="hint">Choose a source connection first.</p>
+              )}
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="label" htmlFor="since">
